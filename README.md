@@ -1,9 +1,11 @@
-# CCA-F Mock Exam: Claude Certified Architect
+# CCA-F(Unofficial) Mock Exam: Claude Certified Architect
 
 A comprehensive, exam-aligned mock testing platform for the **Claude Certified Architect – Foundations (CCA-F)** certification. Prepare for the official Anthropic exam with 60 high-quality questions covering all five certification domains.
 
 ## 🚀 Live Demo
-[Insert your GitHub Pages URL here]
+Access the live mock exam platform and simulate the real CCA-F certification experience:
+
+👉 https://mominurr.github.io/cca-f-mock-exam
 
 ## ✨ Features
 
