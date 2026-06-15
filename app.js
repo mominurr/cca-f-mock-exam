@@ -106,7 +106,9 @@ function showScreen(name) {
 
 // ── Theme ──────────────────────────────────────────────────
 function initTheme() {
-  const saved = localStorage.getItem('ccaf_theme') || 'light';
+  // Normalise the stored value: only 'dark' or 'light' are trusted, anything
+  // else (tampered or stale) falls back to the default light theme.
+  const saved = localStorage.getItem('ccaf_theme') === 'dark' ? 'dark' : 'light';
   document.documentElement.dataset.theme = saved;
 }
 
@@ -131,12 +133,43 @@ function saveState() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch(e) {}
 }
 
+// Validate restored state before it is trusted. Returns true only for a
+// well-formed payload; anything malformed or tampered with is rejected so it
+// can be cleared rather than fed into the render paths.
+function isValidSavedState(data) {
+  if (!data || typeof data !== 'object') return false;
+
+  if (typeof data.startTime !== 'number' || !isFinite(data.startTime)) return false;
+  if (typeof data.totalSeconds !== 'number' || !isFinite(data.totalSeconds) || data.totalSeconds <= 0) return false;
+  if (typeof data.currentIndex !== 'number' || !Number.isInteger(data.currentIndex) || data.currentIndex < 0) return false;
+
+  if (!Array.isArray(data.questions) || data.questions.length === 0) return false;
+  const validQuestion = q =>
+    q && typeof q === 'object' &&
+    (typeof q.id === 'string' || typeof q.id === 'number') &&
+    typeof q.question === 'string' &&
+    typeof q.correctAnswer === 'string' &&
+    Array.isArray(q.options) && q.options.length > 0 &&
+    q.options.every(o => o && typeof o === 'object' &&
+      typeof o.letter === 'string' && typeof o.text === 'string');
+  if (!data.questions.every(validQuestion)) return false;
+  if (data.currentIndex >= data.questions.length) return false;
+
+  if (data.answers !== undefined && (typeof data.answers !== 'object' || data.answers === null || Array.isArray(data.answers))) return false;
+  if (data.flags !== undefined && !Array.isArray(data.flags)) return false;
+
+  return true;
+}
+
 function loadSavedState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    if (!data.questions || !data.startTime) return null;
+    if (!isValidSavedState(data)) {
+      clearSavedState();
+      return null;
+    }
     // Check if time has already expired
     const elapsed = Math.floor((Date.now() - data.startTime) / 1000);
     if (elapsed >= data.totalSeconds) {
@@ -278,9 +311,10 @@ function renderQuestion(index) {
   html += `<div class="options-group" role="radiogroup" aria-labelledby="q-text-${index}">`;
   q.options.forEach(opt => {
     const isSelected = selectedAnswer === opt.letter;
-    html += `<label class="option-label${isSelected ? ' selected' : ''}" data-letter="${opt.letter}">
-      <input type="radio" name="answer" value="${opt.letter}" ${isSelected ? 'checked' : ''} aria-label="Option ${opt.letter}">
-      <span class="option-letter">${opt.letter}</span>
+    const letter = escapeHtml(opt.letter);
+    html += `<label class="option-label${isSelected ? ' selected' : ''}" data-letter="${letter}">
+      <input type="radio" name="answer" value="${letter}" ${isSelected ? 'checked' : ''} aria-label="Option ${letter}">
+      <span class="option-letter">${letter}</span>
       <span class="option-text">${escapeHtml(opt.text)}</span>
     </label>`;
   });
@@ -495,7 +529,7 @@ function renderReview() {
         suffix = '<span class="review-option-suffix" style="color:var(--color-correct)">✓ Your answer</span>';
       }
       optionsHtml += `<div class="review-option ${cls}">
-        <span class="review-option-letter">${opt.letter}</span>
+        <span class="review-option-letter">${escapeHtml(opt.letter)}</span>
         <span class="review-option-text">${escapeHtml(opt.text)}</span>
         ${suffix}
       </div>`;
@@ -507,13 +541,13 @@ function renderReview() {
       const entries = Object.entries(q.wrongAnswerExplanations).filter(([l]) => l !== q.correctAnswer);
       if (entries.length) {
         wrongHtml = `<div class="wrong-explanations">${entries.map(([l, exp]) =>
-          `<div class="wrong-exp-item"><strong>Why ${l} is incorrect:</strong> ${escapeHtml(exp)}</div>`
+          `<div class="wrong-exp-item"><strong>Why ${escapeHtml(l)} is incorrect:</strong> ${escapeHtml(exp)}</div>`
         ).join('')}</div>`;
       }
     }
 
     const unansweredNote = isUnanswered
-      ? `<div class="wrong-exp-item" style="border-color:var(--color-text-muted)"><strong>Not answered.</strong> The correct answer is <strong>${q.correctAnswer}</strong>.</div>`
+      ? `<div class="wrong-exp-item" style="border-color:var(--color-text-muted)"><strong>Not answered.</strong> The correct answer is <strong>${escapeHtml(q.correctAnswer)}</strong>.</div>`
       : '';
 
     html += `
